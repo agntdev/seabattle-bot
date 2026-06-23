@@ -128,3 +128,7 @@ export function inviteStore(): InviteStore {
   }
   return _store;
 }
+
+export function resetInviteStore(): void {
+  _store = null;
+}

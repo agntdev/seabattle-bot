@@ -6,6 +6,7 @@ import { resetUserStorage } from "./models/user.js";
 import { resetMatchInviteStorage } from "./models/invite.js";
 import { resetProfileStore } from "./storage/profile-store.js";
 import { resetMatchmakingQueue } from "./storage/matchmaking-queue.js";
+import { resetInviteStore } from "./storage/invite-store.js";
 
 // The Tests-gate harness imports THIS module and calls makeBot() with no args,
 // replaying dialog specs tokenlessly (it fakes the Bot API transport — no real
@@ -19,5 +20,6 @@ export async function makeBot() {
   resetMatchInviteStorage();
   resetProfileStore();
   resetMatchmakingQueue();
+  resetInviteStore();
   return buildBot(process.env.BOT_TOKEN ?? "harness-test-token");
 }
