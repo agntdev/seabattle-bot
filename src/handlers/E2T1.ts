@@ -5,20 +5,21 @@ import { inlineKeyboard, inlineButton } from "../toolkit/ui/keyboard.js";
 
 const composer = new Composer<Ctx>();
 
-composer.command("start", async (ctx) => {
+composer.command("start", async (ctx, next) => {
+  const param = ctx.match?.trim();
+  if (param && param.startsWith("invite_")) {
+    return next();
+  }
   if (!ctx.from) {
     await ctx.reply("This command can only be used in private chat.");
     return;
   }
   await userStorage.create(newUser(ctx.from.id, ctx.from.first_name));
-  await ctx.reply(
-    `Welcome, ${ctx.from.first_name}! Your profile has been created.\nReady to get started?`,
-    {
-      reply_markup: inlineKeyboard([
-        [inlineButton("Get Started", "onboarding:start")],
-      ]),
-    },
-  );
+  await ctx.reply("Welcome! I am ready to help.", {
+    reply_markup: inlineKeyboard([
+      [inlineButton("Get Started", "onboarding:start")],
+    ]),
+  });
 });
 
 composer.callbackQuery("onboarding:start", async (ctx) => {
