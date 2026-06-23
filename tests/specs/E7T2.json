@@ -36,7 +36,7 @@
           {
             "method": "answerCallbackQuery",
             "payload": {
-              "text": "Use /fire <row> <col> to attack!",
+              "text": "Use /attack to open the attack grid (match #1)!",
               "show_alert": true
             }
           }
