@@ -9,6 +9,7 @@ import {
   SHOT_RESULT_SUNK,
 } from "../models/board.js";
 import { type ShipType, type ShipOrientation } from "../models/ship.js";
+import { matchStorage } from "../models/match.js";
 import { moveStorage, checkWinCondition } from "../models/move.js";
 import { profileStore } from "../storage/profile-store.js";
 
@@ -22,6 +23,7 @@ interface AttackSession {
   attackMsgId?: number;
   opponentId?: number;
   attacks?: AttackCell[];
+  matchId?: string;
 }
 
 const FIXED_PLACEMENTS: { type: ShipType; row: number; col: number; orientation: ShipOrientation }[] = [
@@ -133,6 +135,7 @@ async function notifyOpponent(
   col: number,
   result: string,
   shipName?: string,
+  matchId?: string,
 ): Promise<void> {
   const prefix = "Opponent";
   let text: string;
@@ -143,8 +146,16 @@ async function notifyOpponent(
   } else {
     text = `${prefix} fired at (${row}, ${col}) — Sunk the ${shipName ?? "ship"}!`;
   }
+
+  const extra: Record<string, unknown> = {};
+  if (matchId) {
+    extra.reply_markup = inlineKeyboard([
+      [inlineButton("Your Turn", `turnt:match:${matchId}`)],
+    ]);
+  }
+
   try {
-    await ctx.api.sendMessage(opponentId, text);
+    await ctx.api.sendMessage(opponentId, text, extra);
   } catch (err) {
     console.error("Failed to notify opponent", opponentId, err);
   }
@@ -154,7 +165,33 @@ const composer = new Composer<Ctx>();
 
 composer.command("attack", async (ctx) => {
   const chatId = ctx.chat!.id;
-  const opponentId = chatId + 1;
+
+  let opponentId: number;
+  let matchId: string | undefined;
+
+  const matches = await matchStorage.findByPlayer(chatId);
+  const activeMatch = matches.find((m) => m.state !== "completed");
+
+  if (activeMatch) {
+    if (activeMatch.state === "waiting") {
+      const started = await matchStorage.startMatch(activeMatch.id);
+      if (!started) {
+        await ctx.reply("Failed to start match.");
+        return;
+      }
+      activeMatch.state = "in_progress";
+      activeMatch.turn = started.turn;
+    }
+    if (activeMatch.turn !== chatId) {
+      await ctx.reply("It is not your turn.");
+      return;
+    }
+    opponentId =
+      activeMatch.playerA === chatId ? activeMatch.playerB : activeMatch.playerA;
+    matchId = activeMatch.id;
+  } else {
+    opponentId = chatId + 1;
+  }
 
   await seedOpponentBoard(opponentId);
 
@@ -168,6 +205,7 @@ composer.command("attack", async (ctx) => {
     attackMsgId: 0,
     opponentId,
     attacks: existingAttacks,
+    matchId,
   };
 
   const gridKeyboard = buildGridKeyboard(state.attacks ?? []);
@@ -211,11 +249,15 @@ composer.callbackQuery(/^atk:(\d+):(\d+)$/, async (ctx) => {
     setAttackState(ctx, state);
 
     await moveStorage.create(
-      `attack:${chatId}:${state.opponentId}`,
+      state.matchId ?? `attack:${chatId}:${state.opponentId}`,
       chatId,
       outcome.position,
       outcome.result,
     );
+
+    if (state.matchId) {
+      await matchStorage.passTurn(state.matchId, chatId);
+    }
 
     const gridKeyboard = buildGridKeyboard(attacks);
     try {
@@ -231,18 +273,22 @@ composer.callbackQuery(/^atk:(\d+):(\d+)$/, async (ctx) => {
       await ctx.answerCallbackQuery({ text: "Grid update failed, but shot recorded.", show_alert: true });
     }
 
-    await notifyOpponent(ctx, state.opponentId, row, col, SHOT_RESULT_MISS);
+    await notifyOpponent(ctx, state.opponentId, row, col, SHOT_RESULT_MISS, undefined, state.matchId);
   } else if (outcome.result === SHOT_RESULT_HIT) {
     attacks.push({ row, col, hit: true });
     state.attacks = attacks;
     setAttackState(ctx, state);
 
     await moveStorage.create(
-      `attack:${chatId}:${state.opponentId}`,
+      state.matchId ?? `attack:${chatId}:${state.opponentId}`,
       chatId,
       outcome.position,
       outcome.result,
     );
+
+    if (state.matchId) {
+      await matchStorage.passTurn(state.matchId, chatId);
+    }
 
     const gridKeyboard = buildGridKeyboard(attacks);
     try {
@@ -258,18 +304,22 @@ composer.callbackQuery(/^atk:(\d+):(\d+)$/, async (ctx) => {
       await ctx.answerCallbackQuery({ text: "Grid update failed, but shot recorded.", show_alert: true });
     }
 
-    await notifyOpponent(ctx, state.opponentId, row, col, SHOT_RESULT_HIT);
+    await notifyOpponent(ctx, state.opponentId, row, col, SHOT_RESULT_HIT, undefined, state.matchId);
   } else if (outcome.result === SHOT_RESULT_SUNK) {
     attacks.push({ row, col, hit: true });
     state.attacks = attacks;
     setAttackState(ctx, state);
 
     await moveStorage.create(
-      `attack:${chatId}:${state.opponentId}`,
+      state.matchId ?? `attack:${chatId}:${state.opponentId}`,
       chatId,
       outcome.position,
       outcome.result,
     );
+
+    if (state.matchId) {
+      await matchStorage.passTurn(state.matchId, chatId);
+    }
 
     const gridKeyboard = buildGridKeyboard(attacks);
     const shipName = outcome.ship?.type ?? "ship";
@@ -285,9 +335,12 @@ composer.callbackQuery(/^atk:(\d+):(\d+)$/, async (ctx) => {
       console.error("Failed to update grid on sunk", err);
       await ctx.answerCallbackQuery({ text: "Grid update failed, but shot recorded.", show_alert: true });
     }
-    await notifyOpponent(ctx, state.opponentId, row, col, SHOT_RESULT_SUNK, shipName);
+    await notifyOpponent(ctx, state.opponentId, row, col, SHOT_RESULT_SUNK, shipName, state.matchId);
 
     if (checkWinCondition(outcome.board)) {
+      if (state.matchId) {
+        await matchStorage.completeMatch(state.matchId);
+      }
       await triggerEndgame(ctx, chatId, state.opponentId);
       clearAttackState(ctx);
     }

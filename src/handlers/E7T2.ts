@@ -61,8 +61,9 @@ composer.command("turnt", async (ctx) => {
 });
 
 composer.callbackQuery(/^turnt:match:(.+)$/, async (ctx) => {
+  const matchId = ctx.match[1];
   await ctx.answerCallbackQuery({
-    text: "Use /fire <row> <col> to attack!",
+    text: `Use /attack to open the attack grid (match #${matchId})!`,
     show_alert: true,
   });
 });
