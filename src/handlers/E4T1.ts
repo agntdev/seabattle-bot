@@ -6,11 +6,10 @@ import { createRequire } from "node:module";
 interface MatchmakingRedis {
   lpush(key: string, ...values: string[]): Promise<number>;
   rpop(key: string): Promise<string | null>;
+  lrem(key: string, count: number, value: string): Promise<number>;
+  lpos(key: string, value: string): Promise<number | null>;
   set(key: string, value: string): Promise<unknown>;
   del(key: string): Promise<unknown>;
-  sadd(key: string, ...members: string[]): Promise<number>;
-  srem(key: string, ...members: string[]): Promise<number>;
-  scard(key: string): Promise<number>;
 }
 
 function getMatchmakingClient(): MatchmakingRedis | null {
@@ -50,17 +49,20 @@ composer.command("quickmatch", async (ctx) => {
     return;
   }
 
-  const alreadyInQueue = await redis.sadd(QUEUE_KEY, chatId.toString());
-  if (alreadyInQueue === 0) {
+  const currentChatStr = chatId.toString();
+
+  const existingPosition = await redis.lpos(QUEUE_KEY, currentChatStr);
+  if (existingPosition !== null) {
     await ctx.reply("You are already in the matchmaking queue.");
     return;
   }
 
+  await redis.lpush(QUEUE_KEY, currentChatStr);
+
   const opponentStr = await redis.rpop(QUEUE_KEY);
-  const currentChatStr = chatId.toString();
 
   if (opponentStr && opponentStr !== currentChatStr) {
-    await redis.srem(QUEUE_KEY, currentChatStr);
+    await redis.lrem(QUEUE_KEY, 1, currentChatStr);
 
     const matchKey = `match:${opponentStr}:${currentChatStr}`;
     await redis.set(matchKey, JSON.stringify({
@@ -89,7 +91,7 @@ composer.command("quickmatch", async (ctx) => {
   } else {
     if (opponentStr === currentChatStr) {
       await redis.rpop(QUEUE_KEY);
-      await redis.sadd(QUEUE_KEY, currentChatStr);
+      await redis.lpush(QUEUE_KEY, currentChatStr);
     }
 
     await ctx.reply("Searching for an opponent...");
