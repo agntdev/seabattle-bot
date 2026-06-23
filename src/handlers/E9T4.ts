@@ -1,10 +1,23 @@
 import { Composer } from "grammy";
 import type { Ctx } from "../bot.js";
 import { matchStorage } from "../models/match.js";
+import type { Match } from "../models/match.js";
 import { boardStorage } from "../models/board.js";
 import { moveStorage, checkWinCondition } from "../models/move.js";
 
 const composer = new Composer<Ctx>();
+
+function activeListText(
+  active: Match[],
+  userId: number,
+): string {
+  return active
+    .map((m) => {
+      const opp = m.playerA === userId ? m.playerB : m.playerA;
+      return `#${m.id} vs ${opp} (${m.state})`;
+    })
+    .join("\n");
+}
 
 composer.command("fire", async (ctx) => {
   if (!ctx.from) {
@@ -12,24 +25,64 @@ composer.command("fire", async (ctx) => {
     return;
   }
   const args = ctx.message?.text?.trim().split(/\s+/) ?? [];
-  if (args.length < 3) {
-    await ctx.reply("Usage: /fire <row> <col>");
-    return;
-  }
-  const row = parseInt(args[1], 10);
-  const col = parseInt(args[2], 10);
-  if (isNaN(row) || row < 0 || isNaN(col) || col < 0) {
-    await ctx.reply("Row and col must be non-negative integers.");
-    return;
-  }
+  const userId = ctx.from.id;
 
-  const matches = await matchStorage.findByPlayer(ctx.from.id);
+  const matches = await matchStorage.findByPlayer(userId);
   const active = matches.filter((m) => m.state !== "completed");
   if (active.length === 0) {
     await ctx.reply("You have no active match.");
     return;
   }
-  let match = active[0];
+
+  let match: Match;
+  let row: number;
+  let col: number;
+
+  if (active.length === 1) {
+    if (args.length < 3) {
+      await ctx.reply("Usage: /fire <row> <col>");
+      return;
+    }
+    match = active[0];
+    row = parseInt(args[1], 10);
+    col = parseInt(args[2], 10);
+  } else {
+    if (args.length >= 4) {
+      const matchId = args[1];
+      const found = active.find((m) => m.id === matchId);
+      if (!found) {
+        await ctx.reply(
+          "Match #" +
+            matchId +
+            " not found in your active matches.\n\nYour active matches:\n" +
+            activeListText(active, userId),
+        );
+        return;
+      }
+      match = found;
+      row = parseInt(args[2], 10);
+      col = parseInt(args[3], 10);
+    } else if (args.length >= 3) {
+      await ctx.reply(
+        "You have multiple active matches. Specify the match ID:\n\n" +
+          activeListText(active, userId) +
+          "\n\nUsage: /fire <match_id> <row> <col>",
+      );
+      return;
+    } else {
+      await ctx.reply(
+        "You have multiple active matches. Specify the match ID:\n\n" +
+          activeListText(active, userId) +
+          "\n\nUsage: /fire <match_id> <row> <col>",
+      );
+      return;
+    }
+  }
+
+  if (isNaN(row) || row < 0 || isNaN(col) || col < 0) {
+    await ctx.reply("Row and col must be non-negative integers.");
+    return;
+  }
 
   if (match.state === "waiting") {
     const started = await matchStorage.startMatch(match.id);
@@ -45,13 +98,12 @@ composer.command("fire", async (ctx) => {
     return;
   }
 
-  if (match.turn !== ctx.from.id) {
+  if (match.turn !== userId) {
     await ctx.reply("It is not your turn.");
     return;
   }
 
-  const opponent =
-    match.playerA === ctx.from.id ? match.playerB : match.playerA;
+  const opponent = match.playerA === userId ? match.playerB : match.playerA;
 
   const outcome = await boardStorage.fire(opponent, row, col);
   if (!outcome) {
@@ -61,7 +113,7 @@ composer.command("fire", async (ctx) => {
 
   const move = await moveStorage.create(
     match.id,
-    ctx.from.id,
+    userId,
     outcome.position,
     outcome.result,
   );
@@ -76,7 +128,7 @@ composer.command("fire", async (ctx) => {
     return;
   }
 
-  await matchStorage.passTurn(match.id, ctx.from.id);
+  await matchStorage.passTurn(match.id, userId);
   await ctx.reply(
     `Move #${move.id}: ${outcome.result} at (${outcome.position.row},${outcome.position.col}). Next player's turn.`,
   );
@@ -87,13 +139,44 @@ composer.command("history", async (ctx) => {
     await ctx.reply("This command can only be used in private chat.");
     return;
   }
-  const matches = await matchStorage.findByPlayer(ctx.from.id);
+  const args = ctx.message?.text?.trim().split(/\s+/) ?? [];
+  const userId = ctx.from.id;
+
+  const matches = await matchStorage.findByPlayer(userId);
   const active = matches.filter((m) => m.state !== "completed");
   if (active.length === 0) {
     await ctx.reply("You have no active match.");
     return;
   }
-  const match = active[0];
+
+  let match: Match;
+
+  if (active.length === 1) {
+    match = active[0];
+  } else {
+    if (args.length >= 2) {
+      const matchId = args[1];
+      const found = active.find((m) => m.id === matchId);
+      if (!found) {
+        await ctx.reply(
+          "Match #" +
+            matchId +
+            " not found in your active matches.\n\nYour active matches:\n" +
+            activeListText(active, userId),
+        );
+        return;
+      }
+      match = found;
+    } else {
+      await ctx.reply(
+        "You have multiple active matches. Specify the match ID:\n\n" +
+          activeListText(active, userId) +
+          "\n\nUsage: /history <match_id>",
+      );
+      return;
+    }
+  }
+
   const moves = await moveStorage.findByMatch(match.id);
   if (moves.length === 0) {
     await ctx.reply("No moves recorded yet.");
