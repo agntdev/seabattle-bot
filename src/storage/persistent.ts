@@ -6,6 +6,7 @@ export interface DomainRedis {
   del(key: string): Promise<unknown>;
   sadd(key: string, ...members: string[]): Promise<number>;
   lpush(key: string, ...values: string[]): Promise<number>;
+  incr(key: string): Promise<number>;
 }
 
 let _client: DomainRedis | null | undefined = undefined;

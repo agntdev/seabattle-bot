@@ -57,9 +57,14 @@ export class InviteStore {
   }
 
   async nextCode(): Promise<string> {
-    const raw = await this.read(COUNTER_KEY);
+    const redis = this.getClient();
+    if (redis) {
+      const next = await redis.incr(COUNTER_KEY);
+      return `INV-${next}`;
+    }
+    const raw = this.fallback.get(COUNTER_KEY);
     const next = raw ? parseInt(raw, 10) + 1 : 1;
-    await this.write(COUNTER_KEY, String(next));
+    this.fallback.set(COUNTER_KEY, String(next));
     return `INV-${next}`;
   }
 
