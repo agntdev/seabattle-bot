@@ -1,0 +1,46 @@
+[
+  {
+    "name": "/quickmatch starts matchmaking search",
+    "steps": [
+      {
+        "send": { "text": "/quickmatch" },
+        "expect": [
+          {
+            "method": "sendMessage",
+            "payload": { "text": "Matchmaking is unavailable right now. Try again later." }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "ships:place callback confirms manual placement",
+    "steps": [
+      {
+        "send": { "callback": "ships:place", "messageId": 1 },
+        "expect": [
+          { "method": "answerCallbackQuery" },
+          {
+            "method": "editMessageText",
+            "payload": { "text": "Place your ships on the grid. Ready when you are." }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "ships:auto callback confirms auto-placement",
+    "steps": [
+      {
+        "send": { "callback": "ships:auto", "messageId": 1 },
+        "expect": [
+          { "method": "answerCallbackQuery" },
+          {
+            "method": "editMessageText",
+            "payload": { "text": "Ships have been placed automatically. Get ready!" }
+          }
+        ]
+      }
+    ]
+  }
+]
