@@ -6,6 +6,8 @@ import { profileStore } from "../storage/profile-store.js";
 const composer = new Composer<Ctx>();
 
 composer.callbackQuery("profile:view", async (ctx) => {
+  await ctx.answerCallbackQuery();
+
   const userId = ctx.from?.id;
   if (!userId) {
     await ctx.answerCallbackQuery({ text: "Could not identify user.", show_alert: true });
@@ -35,8 +37,6 @@ composer.callbackQuery("profile:view", async (ctx) => {
   } catch {
     await ctx.reply(text, { reply_markup: keyboard, parse_mode: "HTML" });
   }
-
-  await ctx.answerCallbackQuery();
 });
 
 export default composer;
