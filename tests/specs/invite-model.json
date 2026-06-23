@@ -1,0 +1,137 @@
+[
+  {
+    "name": "/createinvite creates a new invite with a valid code",
+    "steps": [
+      {
+        "send": { "text": "/createinvite 60" },
+        "expect": [
+          {
+            "method": "sendMessage",
+            "payload": { "text": "Invite created.\nCode: INV-1" }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "/checkinvite shows invite details for a valid code",
+    "steps": [
+      {
+        "send": { "text": "/createinvite 60" },
+        "expect": [
+          {
+            "method": "sendMessage",
+            "payload": { "text": "Invite created.\nCode: INV-1" }
+          }
+        ]
+      },
+      {
+        "send": { "text": "/checkinvite INV-1" },
+        "expect": [
+          {
+            "method": "sendMessage",
+            "payload": { "text": "Invite INV-1\nHost: 1\nStatus: active" }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "/checkinvite with non-existent code returns not found",
+    "steps": [
+      {
+        "send": { "text": "/checkinvite INV-999" },
+        "expect": [
+          {
+            "method": "sendMessage",
+            "payload": { "text": "Invite not found." }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "/checkinvite with empty code returns validation error",
+    "steps": [
+      {
+        "send": { "text": "/checkinvite" },
+        "expect": [
+          {
+            "method": "sendMessage",
+            "payload": { "text": "Usage: /checkinvite <code>" }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "/createinvite with missing TTL shows usage",
+    "steps": [
+      {
+        "send": { "text": "/createinvite" },
+        "expect": [
+          {
+            "method": "sendMessage",
+            "payload": { "text": "Usage: /createinvite <ttl_minutes>" }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "/createinvite with negative TTL shows error",
+    "steps": [
+      {
+        "send": { "text": "/createinvite -5" },
+        "expect": [
+          {
+            "method": "sendMessage",
+            "payload": { "text": "TTL must be a positive integer (minutes)." }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "/createinvite with zero TTL shows error",
+    "steps": [
+      {
+        "send": { "text": "/createinvite 0" },
+        "expect": [
+          {
+            "method": "sendMessage",
+            "payload": { "text": "TTL must be a positive integer (minutes)." }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "/createinvite with non-numeric TTL shows error",
+    "steps": [
+      {
+        "send": { "text": "/createinvite abc" },
+        "expect": [
+          {
+            "method": "sendMessage",
+            "payload": { "text": "TTL must be a positive integer (minutes)." }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "/checkinvite with invalid characters shows validation error",
+    "steps": [
+      {
+        "send": { "text": "/checkinvite bad code!" },
+        "expect": [
+          {
+            "method": "sendMessage",
+            "payload": { "text": "Invalid code: Code may only contain letters, digits, hyphens, and underscores." }
+          }
+        ]
+      }
+    ]
+  }
+]
