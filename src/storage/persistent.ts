@@ -4,6 +4,7 @@ export interface DomainRedis {
   set(key: string, value: string, expiryMode?: string, seconds?: number): Promise<unknown>;
   get(key: string): Promise<string | null>;
   del(key: string): Promise<unknown>;
+  incr(key: string): Promise<number>;
   sadd(key: string, ...members: string[]): Promise<number>;
   lpush(key: string, ...values: string[]): Promise<number>;
   eval(...args: unknown[]): Promise<unknown>;
