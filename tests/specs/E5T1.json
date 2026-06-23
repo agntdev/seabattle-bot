@@ -1,0 +1,84 @@
+[
+  {
+    "name": "/invite generates a shareable link",
+    "steps": [
+      {
+        "send": { "text": "/invite" },
+        "expect": [
+          {
+            "method": "sendMessage",
+            "payload": { "text": "Share this invite link with a friend (valid for 7 days):\nhttps://t.me/test_bot?start=invite_INV-1" }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "deep link with nonexistent invite code returns error",
+    "steps": [
+      {
+        "send": { "text": "/start invite_NONEXISTENT" },
+        "expect": [
+          {
+            "method": "sendMessage",
+            "payload": { "text": "This invite link is invalid or has expired." }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "deep link with own invite code returns error",
+    "steps": [
+      {
+        "send": { "text": "/invite" },
+        "expect": [{ "method": "sendMessage" }]
+      },
+      {
+        "send": { "text": "/start invite_INV-1", "chatId": 1, "userId": 1 },
+        "expect": [
+          {
+            "method": "sendMessage",
+            "payload": { "text": "You cannot use your own invite link." }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "deep link flow creates pending match and notifies both players",
+    "steps": [
+      {
+        "send": { "text": "/invite", "chatId": 1, "userId": 1 },
+        "expect": [{ "method": "sendMessage" }]
+      },
+      {
+        "send": { "text": "/start invite_INV-1", "chatId": 2, "userId": 2 },
+        "expect": [
+          {
+            "method": "sendMessage",
+            "payload": { "chat_id": 1, "text": "Your invite was accepted. A match with Test is pending." }
+          },
+          {
+            "method": "sendMessage",
+            "payload": { "text": "Match pending! You are about to face the invite sender. Waiting for the host to confirm." }
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "regular /start without invite prefix still shows welcome",
+    "steps": [
+      {
+        "send": { "text": "/start" },
+        "expect": [
+          {
+            "method": "sendMessage",
+            "payload": { "text": "Welcome! I am ready to help." }
+          }
+        ]
+      }
+    ]
+  }
+]
