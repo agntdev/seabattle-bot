@@ -11,6 +11,8 @@ import {
 import { type ShipType, type ShipOrientation } from "../models/ship.js";
 import { checkWinCondition } from "../models/move.js";
 import { profileStore } from "../storage/profile-store.js";
+import { matchStorage } from "../models/match.js";
+import { moveStorage } from "../models/move.js";
 
 interface AttackCell {
   row: number;
@@ -21,6 +23,7 @@ interface AttackCell {
 interface AttackSession {
   attackMsgId?: number;
   opponentId?: number;
+  matchId?: string;
   attacks?: AttackCell[];
 }
 
@@ -147,17 +150,100 @@ async function notifyOpponent(
   } catch {}
 }
 
+async function notifyOpponentWithTurnButton(
+  ctx: Ctx,
+  opponentId: number,
+  matchId: string,
+  row: number,
+  col: number,
+  result: string,
+  shipName?: string,
+): Promise<void> {
+  const prefix = "Opponent";
+  let text: string;
+  if (result === SHOT_RESULT_MISS) {
+    text = `${prefix} fired at (${row}, ${col}) — Miss!`;
+  } else if (result === SHOT_RESULT_HIT) {
+    text = `${prefix} fired at (${row}, ${col}) — Hit!`;
+  } else {
+    text = `${prefix} fired at (${row}, ${col}) — Sunk the ${shipName ?? "ship"}!`;
+  }
+  try {
+    await ctx.api.sendMessage(opponentId, text, {
+      reply_markup: inlineKeyboard([
+        [inlineButton("Your Turn", `turnt:match:${matchId}`)],
+      ]),
+    });
+  } catch {}
+}
+
 const composer = new Composer<Ctx>();
 
 composer.command("attack", async (ctx) => {
   const chatId = ctx.chat!.id;
-  const opponentId = chatId + 1;
+  const args = ctx.message?.text?.trim().split(/\s+/) ?? [];
+  let opponentId: number;
+  let matchId: string | undefined;
+
+  if (args.length >= 2) {
+    matchId = args[1];
+    const match = await matchStorage.read(matchId);
+    if (!match) {
+      await ctx.reply("Match not found.");
+      return;
+    }
+    if (match.state !== "in_progress" && match.state !== "waiting") {
+      await ctx.reply("The match is not active.");
+      return;
+    }
+    if (match.playerA !== chatId && match.playerB !== chatId) {
+      await ctx.reply("You are not a player in this match.");
+      return;
+    }
+    if (match.state === "waiting") {
+      const started = await matchStorage.startMatch(matchId);
+      if (!started) {
+        await ctx.reply("Failed to start match.");
+        return;
+      }
+    }
+    if (match.state === "in_progress" && match.turn !== chatId) {
+      await ctx.reply("It is not your turn.");
+      return;
+    }
+    opponentId = match.playerA === chatId ? match.playerB : match.playerA;
+  } else if (ctx.from) {
+    const matches = await matchStorage.findByPlayer(ctx.from.id);
+    const active = matches.filter((m) => m.state !== "completed");
+    if (active.length > 0) {
+      let m = active[0];
+      if (m.state === "waiting") {
+        const started = await matchStorage.startMatch(m.id);
+        if (!started) {
+          await ctx.reply("Failed to start match.");
+          return;
+        }
+        m = started;
+      }
+      if (m.state === "in_progress" && m.turn !== chatId) {
+        await ctx.reply("It is not your turn.");
+        return;
+      }
+      matchId = m.id;
+      opponentId = m.playerA === chatId ? m.playerB : m.playerA;
+    } else {
+      opponentId = chatId + 1;
+    }
+  } else {
+    opponentId = chatId + 1;
+  }
 
   await seedOpponentBoard(opponentId);
 
   const state: AttackSession = {
     attackMsgId: 0,
     opponentId,
+    matchId,
     attacks: [],
   };
 
@@ -196,66 +282,88 @@ composer.callbackQuery(/^atk:(\d+):(\d+)$/, async (ctx) => {
     return;
   }
 
+  let cellHit = false;
   if (outcome.result === SHOT_RESULT_MISS) {
     attacks.push({ row, col, hit: false });
     state.attacks = attacks;
     setAttackState(ctx, state);
-
-    const gridKeyboard = buildGridKeyboard(attacks);
-    try {
-      await ctx.api.editMessageText(
-        chatId,
-        state.attackMsgId,
-        "Attack grid — tap a cell to fire!\nX = hit, O = miss, ~ = unknown",
-        { reply_markup: gridKeyboard },
-      );
-    } catch {}
-
-    await ctx.answerCallbackQuery({ text: "Miss!", show_alert: true });
-    await notifyOpponent(ctx, state.opponentId, row, col, SHOT_RESULT_MISS);
+    cellHit = false;
   } else if (outcome.result === SHOT_RESULT_HIT) {
     attacks.push({ row, col, hit: true });
     state.attacks = attacks;
     setAttackState(ctx, state);
-
-    const gridKeyboard = buildGridKeyboard(attacks);
-    try {
-      await ctx.api.editMessageText(
-        chatId,
-        state.attackMsgId,
-        "Attack grid — tap a cell to fire!\nX = hit, O = miss, ~ = unknown",
-        { reply_markup: gridKeyboard },
-      );
-    } catch {}
-
-    await ctx.answerCallbackQuery({ text: "Hit!", show_alert: true });
-    await notifyOpponent(ctx, state.opponentId, row, col, SHOT_RESULT_HIT);
+    cellHit = true;
   } else if (outcome.result === SHOT_RESULT_SUNK) {
     attacks.push({ row, col, hit: true });
     state.attacks = attacks;
     setAttackState(ctx, state);
-
-    const gridKeyboard = buildGridKeyboard(attacks);
-    try {
-      await ctx.api.editMessageText(
-        chatId,
-        state.attackMsgId,
-        "Attack grid — tap a cell to fire!\nX = hit, O = miss, ~ = unknown",
-        { reply_markup: gridKeyboard },
-      );
-    } catch {}
-
-    const shipName = outcome.ship?.type ?? "ship";
-    await ctx.answerCallbackQuery({ text: `Sunk the ${shipName}!`, show_alert: true });
-    await notifyOpponent(ctx, state.opponentId, row, col, SHOT_RESULT_SUNK, shipName);
-
-    if (checkWinCondition(outcome.board)) {
-      await triggerEndgame(ctx, chatId, state.opponentId);
-      clearAttackState(ctx);
-    }
+    cellHit = true;
   } else {
     await ctx.answerCallbackQuery();
+    return;
   }
+
+  const gridKeyboard = buildGridKeyboard(attacks);
+  try {
+    await ctx.api.editMessageText(
+      chatId,
+      state.attackMsgId,
+      "Attack grid — tap a cell to fire!\nX = hit, O = miss, ~ = unknown",
+      { reply_markup: gridKeyboard },
+    );
+  } catch {}
+
+  if (outcome.result === SHOT_RESULT_MISS) {
+    await ctx.answerCallbackQuery({ text: "Miss!", show_alert: true });
+  } else if (outcome.result === SHOT_RESULT_HIT) {
+    await ctx.answerCallbackQuery({ text: "Hit!", show_alert: true });
+  } else if (outcome.result === SHOT_RESULT_SUNK) {
+    const shipName = outcome.ship?.type ?? "ship";
+    await ctx.answerCallbackQuery({ text: `Sunk the ${shipName}!`, show_alert: true });
+  }
+
+  if (state.matchId) {
+    await moveStorage.create(
+      state.matchId,
+      chatId,
+      outcome.position,
+      outcome.result,
+    );
+
+    const won = checkWinCondition(outcome.board);
+
+    if (won) {
+      await matchStorage.completeMatch(state.matchId);
+      await notifyOpponentWithTurnButton(
+        ctx, state.opponentId, state.matchId, row, col, outcome.result, outcome.ship?.type,
+      );
+      await triggerEndgame(ctx, chatId, state.opponentId);
+      clearAttackState(ctx);
+    } else {
+      await matchStorage.passTurn(state.matchId, chatId);
+      await notifyOpponentWithTurnButton(
+        ctx, state.opponentId, state.matchId, row, col, outcome.result, outcome.ship?.type,
+      );
+    }
+  } else {
+    if (cellHit) {
+      await notifyOpponent(ctx, state.opponentId, row, col, outcome.result, outcome.ship?.type);
+      if (outcome.result === SHOT_RESULT_SUNK && checkWinCondition(outcome.board)) {
+        await triggerEndgame(ctx, chatId, state.opponentId);
+        clearAttackState(ctx);
+      }
+    } else {
+      await notifyOpponent(ctx, state.opponentId, row, col, SHOT_RESULT_MISS);
+    }
+  }
+});
+
+composer.callbackQuery(/^turnt:attack:(.+)$/, async (ctx) => {
+  const matchId = ctx.match[1];
+  await ctx.answerCallbackQuery({
+    text: `Use /attack ${matchId} to open the attack grid!`,
+    show_alert: true,
+  });
 });
 
 export default composer;
