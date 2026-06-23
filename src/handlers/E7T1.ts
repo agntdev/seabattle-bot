@@ -53,6 +53,10 @@ function buildGridKeyboard(attacks: AttackCell[]): ReturnType<typeof inlineKeybo
 }
 
 async function seedOpponentBoard(opponentId: number): Promise<void> {
+  const board = await boardStorage.getBoard(opponentId);
+  if (board.ships.length > 0) {
+    return;
+  }
   for (const placement of FIXED_PLACEMENTS) {
     const result = await boardStorage.placeShip(
       opponentId,
@@ -61,8 +65,11 @@ async function seedOpponentBoard(opponentId: number): Promise<void> {
       placement.col,
       placement.orientation,
     );
-    if (!result.ok && result.error === "duplicate") {
-      continue;
+    if (!result.ok) {
+      if (result.error === "duplicate") {
+        continue;
+      }
+      return;
     }
   }
 }
