@@ -36,4 +36,14 @@ describe("buildBot handler loader", () => {
     expect(suite.failed).toBe(0);
     expect(suite.passed).toBe(raw.length);
   });
+
+  it("E1T1 Quick Match button spec passes via in-memory queue fallback", async () => {
+    const raw = JSON.parse(
+      readFileSync(new URL("./specs/E1T1.json", import.meta.url), "utf8"),
+    ) as unknown[];
+    const specs = raw.map(parseBotSpec);
+    const suite = await runSpecs(() => buildBot("test-token"), specs);
+    expect(suite.failed).toBe(0);
+    expect(suite.passed).toBe(raw.length);
+  });
 });
