@@ -95,12 +95,13 @@ composer.callbackQuery("mm:wait", async (ctx) => {
       const candidates = await redis.zrangebyscore(QUEUE_ZSET, minScore, maxScore);
       const opponentId = candidates.find((id) => id !== userId.toString());
       if (opponentId) {
+        const opponentChatId = await redis.get(CHAT_KEY_PREFIX + opponentId);
+
         await redis.zrem(QUEUE_ZSET, userId.toString(), opponentId);
         await redis.del(CHAT_KEY_PREFIX + userId.toString());
         await redis.del(CHAT_KEY_PREFIX + opponentId);
         sess.mmActive = false;
 
-        const opponentChatId = await redis.get(CHAT_KEY_PREFIX + opponentId);
         if (opponentChatId) {
           await ctx.api.sendMessage(
             parseInt(opponentChatId, 10),
