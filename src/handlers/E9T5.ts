@@ -38,7 +38,7 @@ composer.command("checkinvite", async (ctx) => {
     await ctx.reply("Usage: /checkinvite <code>");
     return;
   }
-  const code = args[1];
+  const code = args.slice(1).join(" ");
   const validationError = validateCode(code);
   if (validationError) {
     await ctx.reply(`Invalid code: ${validationError}`);
