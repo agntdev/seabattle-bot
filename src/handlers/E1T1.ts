@@ -16,7 +16,7 @@ composer.callbackQuery("matchmaking:quick", async (ctx) => {
     return;
   }
 
-  await redis.sadd("matchmaking:queue", chatId.toString());
+  await redis.lpush("matchmaking:queue", chatId.toString());
   await ctx.editMessageText("Looking for a match...");
 });
 
