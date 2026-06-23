@@ -72,8 +72,19 @@ export class ProfileStore {
   }
 
   async ensure(userId: number): Promise<UserProfile> {
-    const existing = await this.get(userId);
-    return existing;
+    const key = this.k(userId);
+    let raw: string | null;
+    if (this.useRedis && this.redis) {
+      raw = await this.redis.get(key);
+    } else {
+      raw = this.fallback.get(key) ?? null;
+    }
+    if (raw === null) {
+      const profile = { ...DEFAULT_PROFILE };
+      await this.set(userId, profile);
+      return profile;
+    }
+    return deserialize(raw);
   }
 }
 
