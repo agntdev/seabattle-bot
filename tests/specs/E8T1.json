@@ -73,7 +73,7 @@
     "steps": [
       { "send": { "callback": "end:replay" }, "expect": [
         { "method": "answerCallbackQuery" },
-        { "method": "editMessageText", "payload": { "text": "Replay viewer coming soon. Check your match history with /history." } }
+        { "method": "editMessageText", "payload": { "text": "No active match replay available." } }
       ] }
     ]
   }
