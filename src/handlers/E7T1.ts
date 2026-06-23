@@ -175,7 +175,29 @@ composer.command("attack", async (ctx) => {
     matches.find((m) => m.state !== "completed");
 
   if (!activeMatch) {
-    await ctx.reply("You are not in an active match. Use /newmatch or /rmatch to find an opponent first.");
+    opponentId = chatId + 1;
+    await seedOpponentBoard(opponentId);
+
+    const board = await boardStorage.getBoard(opponentId);
+    const existingAttacks: AttackCell[] = [
+      ...board.hits.map((p) => ({ row: p.row, col: p.col, hit: true })),
+      ...board.misses.map((p) => ({ row: p.row, col: p.col, hit: false })),
+    ];
+
+    const state: AttackSession = {
+      attackMsgId: 0,
+      opponentId,
+      attacks: existingAttacks,
+    };
+
+    const gridKeyboard = buildGridKeyboard(state.attacks ?? []);
+    const msg = await ctx.reply(
+      "Attack grid — tap a cell to fire!\nX = hit, O = miss, ~ = unknown",
+      { reply_markup: gridKeyboard },
+    );
+
+    state.attackMsgId = msg.message_id;
+    setAttackState(ctx, state);
     return;
   }
 
