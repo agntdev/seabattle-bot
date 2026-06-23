@@ -24,6 +24,7 @@ export interface MatchStorage {
   startMatch(id: string): Promise<Match | null>;
   passTurn(id: string, currentPlayer: number): Promise<Match | null>;
   completeMatch(id: string): Promise<Match | null>;
+  reset(): Promise<void>;
 }
 
 const MATCH_KEY_PREFIX = "match:";
@@ -162,6 +163,10 @@ export class RedisMatchStorage implements MatchStorage {
     if (match.state !== "in_progress") return match;
     return this.update(id, { state: "completed", turn: 0 });
   }
+
+  async reset(): Promise<void> {
+    await this.client.del(MATCH_COUNTER_KEY);
+  }
 }
 
 export class MemoryMatchStorage implements MatchStorage {
@@ -274,6 +279,12 @@ export class MemoryMatchStorage implements MatchStorage {
     const updated: Match = { ...match, state: "completed", turn: 0 };
     this.store.set(id, updated);
     return updated;
+  }
+
+  async reset(): Promise<void> {
+    this.store.clear();
+    this.playerMatches.clear();
+    this.counter = 0;
   }
 }
 
