@@ -11,7 +11,7 @@ composer.command("start", async (ctx, next) => {
   }
   if (!ctx.from) {
     await ctx.reply("This command can only be used in private chat.");
-    return;
+    return next();
   }
   await userStorage.create(newUser(ctx.from.id, ctx.from.first_name));
   await ctx.reply(
@@ -22,6 +22,7 @@ composer.command("start", async (ctx, next) => {
       ]),
     },
   );
+  await next();
 });
 
 composer.callbackQuery("onboarding:start", async (ctx) => {
