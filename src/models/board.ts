@@ -116,6 +116,7 @@ export interface BoardStorage {
     orientation: ShipOrientation,
   ): Promise<PlacementResult | PlacementError>;
   getBoard(owner: number): Promise<Board>;
+  resetBoard(owner: number): Promise<Board>;
   fire(
     target: number,
     row: number,
@@ -184,6 +185,12 @@ export class RedisBoardStorage implements BoardStorage {
 
   async getBoard(owner: number): Promise<Board> {
     return this.load(owner);
+  }
+
+  async resetBoard(owner: number): Promise<Board> {
+    const board = emptyBoard(owner);
+    await this.save(board);
+    return board;
   }
 
   async fire(
@@ -278,6 +285,12 @@ export class MemoryBoardStorage implements BoardStorage {
 
   async getBoard(owner: number): Promise<Board> {
     return this.load(owner);
+  }
+
+  async resetBoard(owner: number): Promise<Board> {
+    const board = emptyBoard(owner);
+    this.save(board);
+    return board;
   }
 
   async fire(

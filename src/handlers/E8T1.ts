@@ -1,17 +1,69 @@
 import { Composer } from "grammy";
 import type { Ctx } from "../bot.js";
 import { inlineButton, inlineKeyboard } from "../toolkit/ui/keyboard.js";
-import { boardStorage } from "../models/board.js";
+import {
+  boardStorage,
+  BOARD_SIZE,
+} from "../models/board.js";
 import { checkWinCondition } from "../models/move.js";
 import { profileStore } from "../storage/profile-store.js";
+import { type ShipType, type ShipOrientation } from "../models/ship.js";
+
+interface AttackCell {
+  row: number;
+  col: number;
+  hit: boolean;
+}
 
 interface AttackSession {
   attackMsgId?: number;
   opponentId?: number;
+  attacks?: AttackCell[];
 }
 
 function getAttackSession(ctx: Ctx): AttackSession | undefined {
   return (ctx.session as Record<string, unknown>).attackState as AttackSession | undefined;
+}
+
+function setAttackSession(ctx: Ctx, state: AttackSession): void {
+  (ctx.session as Record<string, unknown>).attackState = state;
+}
+
+const FIXED_PLACEMENTS: { type: ShipType; row: number; col: number; orientation: ShipOrientation }[] = [
+  { type: "carrier", row: 0, col: 0, orientation: "horizontal" },
+  { type: "battleship", row: 1, col: 0, orientation: "horizontal" },
+  { type: "cruiser", row: 2, col: 0, orientation: "horizontal" },
+  { type: "submarine", row: 3, col: 0, orientation: "horizontal" },
+  { type: "destroyer", row: 4, col: 0, orientation: "horizontal" },
+];
+
+function buildGridKeyboard(attacks: AttackCell[]): ReturnType<typeof inlineKeyboard> {
+  const rows = [];
+  for (let r = 0; r < BOARD_SIZE; r++) {
+    const row: ReturnType<typeof inlineButton>[] = [];
+    for (let c = 0; c < BOARD_SIZE; c++) {
+      const attack = attacks.find((a) => a.row === r && a.col === c);
+      const label = attack ? (attack.hit ? "X" : "O") : "~";
+      row.push(inlineButton(label, `atk:${r}:${c}`));
+    }
+    rows.push(row);
+  }
+  return inlineKeyboard(rows);
+}
+
+async function seedOpponentBoard(opponentId: number): Promise<void> {
+  for (const placement of FIXED_PLACEMENTS) {
+    const result = await boardStorage.placeShip(
+      opponentId,
+      placement.type,
+      placement.row,
+      placement.col,
+      placement.orientation,
+    );
+    if (!result.ok && result.error === "duplicate") {
+      continue;
+    }
+  }
 }
 
 const RATING_DELTA = 25;
@@ -86,9 +138,40 @@ composer.command("endgame", async (ctx) => {
 
 composer.callbackQuery("end:rematch", async (ctx) => {
   await ctx.answerCallbackQuery();
-  await ctx.editMessageText(
-    "Rematch requested! Set up a new game with /invite or /quickmatch.",
-  );
+  const session = getAttackSession(ctx);
+
+  if (!session?.opponentId) {
+    await ctx.editMessageText("No active game to rematch. Start with /attack.");
+    return;
+  }
+
+  const opponentId = session.opponentId;
+
+  await boardStorage.resetBoard(opponentId);
+  await seedOpponentBoard(opponentId);
+
+  const state: AttackSession = {
+    attackMsgId: session.attackMsgId,
+    opponentId,
+    attacks: [],
+  };
+  setAttackSession(ctx, state);
+
+  const gridKeyboard = buildGridKeyboard([]);
+  try {
+    await ctx.editMessageText(
+      "Rematch! Attack grid — tap a cell to fire!\nX = hit, O = miss, ~ = unknown",
+      { reply_markup: gridKeyboard },
+    );
+  } catch {
+    const chatId = ctx.chat!.id;
+    const msg = await ctx.reply(
+      "Rematch! Attack grid — tap a cell to fire!\nX = hit, O = miss, ~ = unknown",
+      { reply_markup: gridKeyboard },
+    );
+    state.attackMsgId = msg.message_id;
+    setAttackSession(ctx, state);
+  }
 });
 
 composer.callbackQuery("end:replay", async (ctx) => {
