@@ -1,0 +1,41 @@
+[
+  {
+    "name": "/register creates a new user with rating 1200",
+    "steps": [
+      {
+        "send": { "text": "/register" },
+        "expect": [
+          { "method": "sendMessage", "payload": { "text": "Registered! Your rating is 1200." } }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "/profile without registering shows not-registered message",
+    "steps": [
+      {
+        "send": { "text": "/profile" },
+        "expect": [
+          { "method": "sendMessage", "payload": { "text": "You are not registered yet. Use /register." } }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "/register then /profile shows full user info",
+    "steps": [
+      {
+        "send": { "text": "/register" },
+        "expect": [
+          { "method": "sendMessage", "payload": { "text": "Registered! Your rating is 1200." } }
+        ]
+      },
+      {
+        "send": { "text": "/profile" },
+        "expect": [
+          { "method": "sendMessage", "payload": { "text": "Name: User\nRating: 1200\nWins: 0\nLosses: 0\nWin rate: 0%" } }
+        ]
+      }
+    ]
+  }
+]
