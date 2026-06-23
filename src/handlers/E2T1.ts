@@ -5,7 +5,10 @@ import { inlineKeyboard, inlineButton } from "../toolkit/ui/keyboard.js";
 
 const composer = new Composer<Ctx>();
 
-composer.command("start", async (ctx) => {
+composer.command("start", async (ctx, next) => {
+  if (ctx.match?.trim().startsWith("invite_")) {
+    return next();
+  }
   if (!ctx.from) {
     await ctx.reply("This command can only be used in private chat.");
     return;
