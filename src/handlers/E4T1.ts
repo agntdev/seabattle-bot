@@ -1,6 +1,6 @@
 import { Composer } from "grammy";
 import type { Ctx } from "../bot.js";
-import { getRedisClient } from "../storage/persistent.js";
+
 import { createRequire } from "node:module";
 
 interface MatchmakingRedis {
