@@ -1,13 +1,20 @@
 import { Composer } from "grammy";
 import type { Ctx } from "../bot.js";
 import { inlineButton, inlineKeyboard } from "../toolkit/ui/keyboard.js";
-import { boardStorage } from "../models/board.js";
+import { boardStorage, BOARD_SIZE } from "../models/board.js";
 import { checkWinCondition } from "../models/move.js";
 import { profileStore } from "../storage/profile-store.js";
+
+interface AttackCell {
+  row: number;
+  col: number;
+  hit: boolean;
+}
 
 interface AttackSession {
   attackMsgId?: number;
   opponentId?: number;
+  attacks?: AttackCell[];
 }
 
 function getAttackSession(ctx: Ctx): AttackSession | undefined {
@@ -93,8 +100,43 @@ composer.callbackQuery("end:rematch", async (ctx) => {
 
 composer.callbackQuery("end:replay", async (ctx) => {
   await ctx.answerCallbackQuery();
+
+  const attackSession = getAttackSession(ctx);
+  if (!attackSession?.opponentId) {
+    await ctx.editMessageText("No active match replay available.");
+    return;
+  }
+
+  const attacks = attackSession.attacks ?? [];
+  if (attacks.length === 0) {
+    await ctx.editMessageText("No moves to replay for this match.");
+    return;
+  }
+
+  const board = await boardStorage.getBoard(attackSession.opponentId);
+
+  const grid: string[][] = Array.from({ length: BOARD_SIZE }, () =>
+    Array<string>(BOARD_SIZE).fill("~"),
+  );
+
+  for (const a of attacks) {
+    grid[a.row][a.col] = a.hit ? "X" : "O";
+  }
+
+  const gridLines = grid.map((row, i) => `${String(i).padStart(2, " ")} ${row.join(" ")}`);
+  const header = "   0 1 2 3 4 5 6 7 8 9";
+  const gridText = [header, ...gridLines].join("\n");
+
+  const shipLines = board.ships.map((s) => {
+    const status = s.sunk ? "SUNK" : `hit ${s.hits.length}/${s.size}`;
+    return `  ${s.type}: ${status}`;
+  });
+
+  const shipSummary =
+    shipLines.length > 0 ? "\n\nShips:\n" + shipLines.join("\n") : "";
+
   await ctx.editMessageText(
-    "Replay viewer coming soon. Check your match history with /history.",
+    `Replay — attacks on opponent board:\n\n${gridText}${shipSummary}`,
   );
 });
 
